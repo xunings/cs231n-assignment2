@@ -53,6 +53,8 @@ def eval_numerical_gradient_array(f, x, df, h=1e-5):
         neg = f(x).copy()
         x[ix] = oldval
 
+        # np.sum calculates the sum of all elements, 
+        # so the gradients of multiple examples are added instead of averaged.
         grad[ix] = np.sum((pos - neg) * df) / (2 * h)
         it.iternext()
     return grad

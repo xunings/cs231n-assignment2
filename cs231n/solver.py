@@ -121,6 +121,7 @@ class Solver(object):
         self.y_val = data['y_val']
 
         # Unpack keyword arguments
+        # dictionary.pop(keyname, defaultvalue)
         self.update_rule = kwargs.pop('update_rule', 'sgd')
         self.optim_config = kwargs.pop('optim_config', {})
         self.lr_decay = kwargs.pop('lr_decay', 1.0)
@@ -142,6 +143,9 @@ class Solver(object):
         # name with the actual function
         if not hasattr(optim, self.update_rule):
             raise ValueError('Invalid update_rule "%s"' % self.update_rule)
+        # getattr(object, name[, default])
+        # getattr(x, 'foobar') is equivalent to x.foobar
+        # name must be a string
         self.update_rule = getattr(optim, self.update_rule)
 
         self._reset()
@@ -161,6 +165,10 @@ class Solver(object):
         self.val_acc_history = []
 
         # Make a deep copy of the optim_config for each parameter
+        # XN: so the conig is copied multi times. It is due to that 
+        # each param is handled independently later in step.
+        # and config, which contains e.g., momentum, is used for 
+        # updating each parameter.
         self.optim_configs = {}
         for p in self.model.params:
             d = {k: v for k, v in self.optim_config.items()}
@@ -246,6 +254,7 @@ class Solver(object):
         for i in range(num_batches):
             start = i * batch_size
             end = (i + 1) * batch_size
+            # XN: end is allowed to be larger than the actual end while indexing 
             scores = self.model.loss(X[start:end])
             y_pred.append(np.argmax(scores, axis=1))
         y_pred = np.hstack(y_pred)
@@ -300,7 +309,9 @@ class Solver(object):
                     self.best_val_acc = val_acc
                     self.best_params = {}
                     for k, v in self.model.params.items():
+                        # XN: why is the copy needed here?
                         self.best_params[k] = v.copy()
 
         # At the end of training swap the best params into the model
+        # Why is it necessary to swap? The params have already been saved in self.best_params.
         self.model.params = self.best_params
