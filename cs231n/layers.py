@@ -201,7 +201,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
             + (1 - momentum) * mean_x
         running_var = momentum * running_var \
             + (1 - momentum) * var_x
-        cache = x, mean_x, var_x, std_x, eps, x_norm, gamma, beta 
+        cache = x, mean_x, std_x, x_norm, gamma
       
         #######################################################################
         #                           END OF YOUR CODE                          #
@@ -253,16 +253,11 @@ def batchnorm_backward(dout, cache):
     # Referencing the original paper (https://arxiv.org/abs/1502.03167)       #
     # might prove to be helpful.                                              #
     ###########################################################################
-    x, mean_x, var_x, std_x, eps, x_norm, gamma, beta = cache
-    N,D = x.shape
+    x, mean_x, std_x, x_norm, gamma = cache
+    N,D = x_norm.shape
     dbeta = np.sum(dout, axis=0)
     dgamma = np.sum(dout*x_norm, axis=0)
     dx_norm = dout * gamma.reshape(1,-1) #reshape to a row vector
-    # Method1 (not implemented):
-    # x_norm = f1(x)/f2(x)
-    # f1(x) = x - mean(x)
-    # f2(x) = sqrt(var(x)+eps)
-    # dx_norm/dx = f1'(x)/f2(x) - f1(x)/f2(x)^2*f2'(x)
     
     # Method2 (according to the paper):
     # Computation graph:
@@ -272,14 +267,14 @@ def batchnorm_backward(dout, cache):
     # x-----------------> x_norm
     
     # sigma -> x_norm
-    dvar = np.sum( dx_norm * (x - mean_x)*(-0.5)*np.power((var_x+eps),-1.5), axis=0, keepdims=True )
+    dvar = np.sum( dx_norm * (x - mean_x)*(-0.5)*np.power(std_x,-3), axis=0, keepdims=True )
     assert(dvar.shape==(1,D))
     # mu -> x_norm + mu->sigma
-    dmean = np.sum(dx_norm, axis=0, keepdims=True) * -1/np.sqrt(var_x+eps) + \
+    dmean = np.sum(dx_norm, axis=0, keepdims=True) * -1/std_x + \
         dvar*2*np.mean(x-mean_x, axis=0, keepdims=True)*-1
     assert(dmean.shape==(1,D))
     # x->x_norm + x->mu + x->sigma
-    dx = dx_norm / np.sqrt(var_x+eps) + \
+    dx = dx_norm / std_x + \
         dmean / N + \
         dvar / N * 2 * (x-mean_x)   
     
@@ -316,8 +311,8 @@ def batchnorm_backward_alt(dout, cache):
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
     
-    x, mean_x, var_x, std_x, eps, y, gamma, beta = cache
-    N,D = x.shape
+    _, _, std_x, y, gamma = cache
+    N,D = y.shape
     dbeta = np.sum(dout, axis=0)
     dgamma = np.sum(dout*y, axis=0)
     dy = dout * gamma.reshape(1,-1) #reshape to a row vector
@@ -337,9 +332,11 @@ def batchnorm_backward_alt(dout, cache):
     
     # xj affects yi indirectly via mean_x and std_x
     # In addition, xj affects yi directly if j==i.
-    # direct part: dyi/dxi = 1/std
-    # indirect part: dyi/dxj (via mean) = -{dmean/dxj}/std = -1/m/std
-    # indirect part: dyi/dxj (via std) = -(xi-mean_x)/std^2 * {dstd/dxj} = - yi*yj/std/m    
+    # let yi =  (f1(xj) - f2(xj))/f3(xj), where f1(xj)=xi, f2(xj)=mean_x, f3(xj)=std_x
+    # dyi/dxj = f1'/f3 - f2'/f3 + (f1-f2)*f3'/f3^2
+    # f1' part: dyi/dxi = 1/std
+    # f2' part: dyi/dxj (via mean) = -{dmean/dxj}/std = -1/m/std
+    # f3' part: dyi/dxj (via std) = -(xi-mean_x)/std^2 * {dstd/dxj} = - yi*yj/std/m    
     # dy is the upstream gradient, so dxi = dyi/std + sum_j( -dyj/m/std  ) + yi*sum_j( -dyj*yj/std/m )
     # so dxi = dyi/std - sum_j( dyj/m/std*(1+yi*yj) )
     dx = dy/std_x - np.sum(dy, axis=0)/N/std_x - y * ( np.sum(dy*y, axis=0)/std_x/ N )
