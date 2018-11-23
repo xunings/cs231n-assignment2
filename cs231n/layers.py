@@ -193,13 +193,15 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # mean_x = np.mean(x, axis=0, keepdims=True)
         mean_x = np.mean(x, axis=0, keepdims=True)
         var_x = np.var(x, axis=0, keepdims=True)
-        x_norm = (x - mean_x) / np.sqrt(var_x + eps)
+        # std is not the direct sqrt of var due to the additional eps.
+        std_x = np.sqrt(var_x + eps) 
+        x_norm = (x - mean_x) / std_x
         out = gamma * x_norm + beta
         running_mean = momentum * running_mean \
             + (1 - momentum) * mean_x
         running_var = momentum * running_var \
             + (1 - momentum) * var_x
-        cache = x, mean_x, var_x, eps, x_norm, gamma, beta 
+        cache = x, mean_x, var_x, std_x, eps, x_norm, gamma, beta 
       
         #######################################################################
         #                           END OF YOUR CODE                          #
@@ -251,7 +253,7 @@ def batchnorm_backward(dout, cache):
     # Referencing the original paper (https://arxiv.org/abs/1502.03167)       #
     # might prove to be helpful.                                              #
     ###########################################################################
-    x, mean_x, var_x, eps, x_norm, gamma, beta = cache
+    x, mean_x, var_x, std_x, eps, x_norm, gamma, beta = cache
     N,D = x.shape
     dbeta = np.sum(dout, axis=0)
     dgamma = np.sum(dout*x_norm, axis=0)
@@ -260,7 +262,7 @@ def batchnorm_backward(dout, cache):
     # x_norm = f1(x)/f2(x)
     # f1(x) = x - mean(x)
     # f2(x) = sqrt(var(x)+eps)
-    # dx_norm/dx = f1'(x)/f2(x) + f1(x)/f2(x)^2*f2'(x)
+    # dx_norm/dx = f1'(x)/f2(x) - f1(x)/f2(x)^2*f2'(x)
     
     # Method2 (according to the paper):
     # Computation graph:
@@ -313,7 +315,35 @@ def batchnorm_backward_alt(dout, cache):
     # should be able to compute gradients with respect to the inputs in a     #
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
-    pass
+    
+    x, mean_x, var_x, std_x, eps, y, gamma, beta = cache
+    N,D = x.shape
+    dbeta = np.sum(dout, axis=0)
+    dgamma = np.sum(dout*y, axis=0)
+    dy = dout * gamma.reshape(1,-1) #reshape to a row vector
+    
+    # The features are independent in batch normalization,
+    # so we can focus on one feauture. 
+    # input: xi, i=[0,N). output: yi = (xi-mean_x)/std_x
+    
+    # dmean/dxi = 1/m for all i.
+    
+    # xi affects i directly and indirectly via mean_x.
+    # dvar/dxi = 1/m * 2 * (xi - mean_x) + sum_j( 1/m * 2 * (xj-mean_x) * -1 * 1/m ) 
+    # so dvar/dxi = 1/m * 2 * (xi - mean_x) + 0, since sum_j(xj-mean_x)=0
+    
+    # dstd/dxi = 1/2 * (var+eps)^-0.5 * dvar/dx
+    # so dstd/dxi = 1/2 * 1/std * 1/m * 2 * (xi - mean_x) = 1/std/m*(xi-mean_x) = yi/m
+    
+    # xj affects yi indirectly via mean_x and std_x
+    # In addition, xj affects yi directly if j==i.
+    # direct part: dyi/dxi = 1/std
+    # indirect part: dyi/dxj (via mean) = -{dmean/dxj}/std = -1/m/std
+    # indirect part: dyi/dxj (via std) = -(xi-mean_x)/std^2 * {dstd/dxj} = - yi*yj/std/m    
+    # dy is the upstream gradient, so dxi = dyi/std + sum_j( -dyj/m/std  ) + yi*sum_j( -dyj*yj/std/m )
+    # so dxi = dyi/std - sum_j( dyj/m/std*(1+yi*yj) )
+    dx = dy/std_x - np.sum(dy, axis=0)/N/std_x - y * ( np.sum(dy*y, axis=0)/std_x/ N )
+      
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -355,7 +385,9 @@ def layernorm_forward(x, gamma, beta, ln_param):
     # transformations you could perform, that would enable you to copy over   #
     # the batch norm code and leave it almost unchanged?                      #
     ###########################################################################
+    
     pass
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
