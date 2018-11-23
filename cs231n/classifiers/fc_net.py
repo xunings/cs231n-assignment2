@@ -180,9 +180,13 @@ class FullyConnectedNet(object):
         dims.extend(hidden_dims)
         dims.append(num_classes)
         for i_layer, dim_in, dim_out \
-            in zip( np.arange(1, len(dims)+1), dims, dims[1:]):
+            in zip( np.arange(1, len(dims)), dims, dims[1:]):
+                # W and b are the weight before i_layer
                 self.params['W'+str(i_layer)] = np.random.randn(dim_in, dim_out) * weight_scale
                 self.params['b'+str(i_layer)] = np.zeros(dim_out)
+                if self.normalization=='batchnorm' and i_layer <= len(hidden_dims):  
+                    self.params['gamma'+str(i_layer)] = np.ones(dim_out)
+                    self.params['beta'+str(i_layer)] = np.zeros(dim_out)
             
             
         ############################################################################
@@ -245,19 +249,26 @@ class FullyConnectedNet(object):
         ############################################################################
         #Zi: output of hidden layer-i before activation.
         #Xi: output of hidden layer-i after activation.
-        Z_all = []
-        X_all = [X]
+        # Z_all = []
+        # X_all = [X]
+        X_forward = X
         affine_cache_all = []
+        bn_cache_all = []
         relu_cache_all = []
         for i in np.arange(1, self.num_layers+1):
-            Z_out, affine_cache = affine_forward(X_all[-1], self.params['W'+str(i)], self.params['b'+str(i)])
-            Z_all.append(Z_out)
+            X_forward, affine_cache = affine_forward(X_forward, self.params['W'+str(i)], self.params['b'+str(i)])
+            # Z_all.append(Z_out)
             affine_cache_all.append(affine_cache)
             if i < self.num_layers: #no relu for the last layer
-                X_out, relu_cache = relu_forward(Z_out)
-                X_all.append(X_out)
+                if self.normalization=='batchnorm':
+                    # the index of bn_params starts from 0, while the i in gammai starts from 1.
+                    X_forward, bn_cache = batchnorm_forward(X_forward, 
+                        self.params['gamma'+str(i)], self.params['beta'+str(i)], self.bn_params[i-1])
+                    bn_cache_all.append(bn_cache)
+                X_forward, relu_cache = relu_forward(X_forward)
+                # X_all.append(X_out)
                 relu_cache_all.append(relu_cache)
-        scores = Z_all[-1]            
+        scores = X_forward #note: scores is not a copy but a reference due to python assignment.            
             
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -282,12 +293,15 @@ class FullyConnectedNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         loss, dScores = softmax_loss(scores,y)
-        dUpstream = dScores
+        dBack = dScores
         for i in np.arange(self.num_layers, 0, -1):
-            dX, grads['W'+str(i)], grads['b'+str(i)] = affine_backward(dUpstream, affine_cache_all.pop())
+            dBack, grads['W'+str(i)], grads['b'+str(i)] = \
+                affine_backward(dBack, affine_cache_all.pop())
             if i>1: #
-                dZ = relu_backward(dX, relu_cache_all.pop())
-                dUpstream = dZ
+                dBack = relu_backward(dBack, relu_cache_all.pop())
+                if self.normalization=='batchnorm':
+                    dBack, grads['gamma'+str(i-1)], grads['beta'+str(i-1)] = \
+                        batchnorm_backward_alt( dBack, bn_cache_all.pop() )
                 
         for param in self.params:
             # The answer does not include b in regularization.
