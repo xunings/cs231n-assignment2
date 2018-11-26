@@ -184,7 +184,8 @@ class FullyConnectedNet(object):
                 # W and b are the weight before i_layer
                 self.params['W'+str(i_layer)] = np.random.randn(dim_in, dim_out) * weight_scale
                 self.params['b'+str(i_layer)] = np.zeros(dim_out)
-                if self.normalization=='batchnorm' and i_layer <= len(hidden_dims):  
+                if (self.normalization=='batchnorm' or self.normalization=='layernorm') \
+                        and i_layer <= len(hidden_dims):  
                     self.params['gamma'+str(i_layer)] = np.ones(dim_out)
                     self.params['beta'+str(i_layer)] = np.zeros(dim_out)
             
@@ -211,6 +212,7 @@ class FullyConnectedNet(object):
         if self.normalization=='batchnorm':
             self.bn_params = [{'mode': 'train'} for i in range(self.num_layers - 1)]
         if self.normalization=='layernorm':
+            # XN: init to empty dict
             self.bn_params = [{} for i in range(self.num_layers - 1)]
 
         # Cast all parameters to the correct datatype
@@ -233,6 +235,8 @@ class FullyConnectedNet(object):
             self.dropout_param['mode'] = mode
         if self.normalization=='batchnorm':
             for bn_param in self.bn_params:
+                # XN: each layer has its own bn_param.
+                # the mode is copied to each layer.
                 bn_param['mode'] = mode
         scores = None
         ############################################################################
@@ -263,6 +267,10 @@ class FullyConnectedNet(object):
                 if self.normalization=='batchnorm':
                     # the index of bn_params starts from 0, while the i in gammai starts from 1.
                     X_forward, bn_cache = batchnorm_forward(X_forward, 
+                        self.params['gamma'+str(i)], self.params['beta'+str(i)], self.bn_params[i-1])
+                    bn_cache_all.append(bn_cache)
+                elif self.normalization=='layernorm':
+                    X_forward, bn_cache = layernorm_forward(X_forward, 
                         self.params['gamma'+str(i)], self.params['beta'+str(i)], self.bn_params[i-1])
                     bn_cache_all.append(bn_cache)
                 X_forward, relu_cache = relu_forward(X_forward)
@@ -302,6 +310,9 @@ class FullyConnectedNet(object):
                 if self.normalization=='batchnorm':
                     dBack, grads['gamma'+str(i-1)], grads['beta'+str(i-1)] = \
                         batchnorm_backward_alt( dBack, bn_cache_all.pop() )
+                elif self.normalization=='layernorm':
+                    dBack, grads['gamma'+str(i-1)], grads['beta'+str(i-1)] = \
+                        layernorm_backward( dBack, bn_cache_all.pop() )
                 
         for param in self.params:
             # The answer does not include b in regularization.

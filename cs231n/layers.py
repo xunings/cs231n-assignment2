@@ -383,7 +383,22 @@ def layernorm_forward(x, gamma, beta, ln_param):
     # the batch norm code and leave it almost unchanged?                      #
     ###########################################################################
     
-    pass
+    mean_x = np.mean(x, axis=1, keepdims=True)
+    var_x = np.var(x, axis=1, keepdims=True)
+    # std is not the direct sqrt of var due to the additional eps.
+    std_x = np.sqrt(var_x + eps) 
+    x_norm = (x - mean_x) / std_x
+    # gamma and beta are still in the same shape as batch norm.
+    # i.e., one gamma per feature, not one gamma per datapoint.
+    # However, the actual normalization is done per datapoint.
+    # It is not so clear if gamma and beta are still supposed to 
+    # partially cancel the normalization effect.
+    out = gamma * x_norm + beta
+    cache = x, mean_x, std_x, x_norm, gamma
+    # In batch norm, it is likely that the mean and variance will be stable when the batch
+    # size is big. However, since the features can be independent, 
+    # the mean and var of layer norm are expected to vary from datapoint to datapoint.
+    # So it is not so meaningful to use the running mean and var from the training stage.
     
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -415,7 +430,18 @@ def layernorm_backward(dout, cache):
     # implementation of batch normalization. The hints to the forward pass    #
     # still apply!                                                            #
     ###########################################################################
-    pass
+    _, _, std_x, y, gamma = cache
+    N,D = y.shape
+    dbeta = np.sum(dout, axis=0)
+    dgamma = np.sum(dout*y, axis=0)
+    dy = dout * gamma.reshape(1,-1) #reshape to a row vector
+
+    # keepdims is necessary here due to the wield behavior of numpy.
+    # if a.shape=(N,), b.shape=(1,N), a/b returns a shape=(1,N) array.
+    # But if b.shape=(N,1), a/b returns a shape=(N,N) array.
+    # It seems that the (N,) shape is not neutral but more like a row vector.
+    dx = dy/std_x - np.sum(dy, axis=1,keepdims=True)/D/std_x \
+        - y * ( np.sum(dy*y, axis=1, keepdims=True)/std_x/ D )
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
