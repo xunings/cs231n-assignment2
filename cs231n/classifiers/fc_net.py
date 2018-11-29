@@ -259,6 +259,7 @@ class FullyConnectedNet(object):
         affine_cache_all = []
         bn_cache_all = []
         relu_cache_all = []
+        dropout_cache_all = []
         for i in np.arange(1, self.num_layers+1):
             X_forward, affine_cache = affine_forward(X_forward, self.params['W'+str(i)], self.params['b'+str(i)])
             # Z_all.append(Z_out)
@@ -276,6 +277,9 @@ class FullyConnectedNet(object):
                 X_forward, relu_cache = relu_forward(X_forward)
                 # X_all.append(X_out)
                 relu_cache_all.append(relu_cache)
+                if self.use_dropout:
+                    X_forward, dropout_cache = dropout_forward(X_forward, self.dropout_param)
+                    dropout_cache_all.append(dropout_cache)
         scores = X_forward #note: scores is not a copy but a reference due to python assignment.            
             
         ############################################################################
@@ -306,6 +310,8 @@ class FullyConnectedNet(object):
             dBack, grads['W'+str(i)], grads['b'+str(i)] = \
                 affine_backward(dBack, affine_cache_all.pop())
             if i>1: #
+                if self.use_dropout:
+                    dBack = dropout_backward(dBack, dropout_cache_all.pop())
                 dBack = relu_backward(dBack, relu_cache_all.pop())
                 if self.normalization=='batchnorm':
                     dBack, grads['gamma'+str(i-1)], grads['beta'+str(i-1)] = \
