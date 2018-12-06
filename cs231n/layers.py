@@ -567,7 +567,22 @@ def conv_forward_naive(x, w, b, conv_param):
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
-    pass
+    N,C,H,W = x.shape
+    F,_,HH,WW = w.shape
+    pad = conv_param['pad']
+    stride = conv_param['stride']
+    x_padded = np.pad(x, ((0,0),(0,0),(pad,pad),(pad,pad)), 'constant',  constant_values=0)
+    H_out = int(1 + (H + 2 * pad - HH) / stride)
+    W_out = int(1 + (W + 2 * pad - WW) / stride)
+    out = np.zeros((N,F,H_out,W_out))
+    for idx in np.ndindex(N,F,H_out,W_out):
+        i_N, i_F, i_H_out, i_W_out = idx
+        x_slice = x_padded[i_N, :, 
+                           i_H_out*stride:i_H_out*stride+HH, 
+                           i_W_out*stride:i_W_out*stride+WW]
+        assert x_slice.shape==(C,HH,WW)
+        out[idx]=np.sum(x_slice*w[i_F,:,:,:])+b[i_F]
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -591,8 +606,25 @@ def conv_backward_naive(dout, cache):
     dx, dw, db = None, None, None
     ###########################################################################
     # TODO: Implement the convolutional backward pass.                        #
-    ###########################################################################
-    pass
+    ###########################################################################   
+    x, w, b, conv_param = cache
+    F,_,HH,WW = w.shape
+    pad = conv_param['pad']
+    stride = conv_param['stride']
+    x_padded = np.pad(x, ((0,0),(0,0),(pad,pad),(pad,pad)), 'constant',  constant_values=0)
+    dx_padded = np.zeros_like(x_padded)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+    for idx in np.ndindex(dout.shape):
+        i_N, i_F, i_H_out, i_W_out = idx
+        x_slice = x_padded[i_N, :, 
+                           i_H_out*stride:i_H_out*stride+HH, 
+                           i_W_out*stride:i_W_out*stride+WW]  
+        dx_padded[i_N, :, i_H_out*stride:i_H_out*stride+HH, i_W_out*stride:i_W_out*stride+WW] += \
+            dout[idx] * w[i_F,:,:,:]
+        dw[i_F,:,:,:] += dout[idx] * x_slice
+        db[i_F] += dout[idx]
+    dx = dx_padded[:,:,pad:-pad,pad:-pad]
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
