@@ -654,7 +654,21 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # TODO: Implement the max-pooling forward pass                            #
     ###########################################################################
-    pass
+    
+    N, C, H, W = x.shape
+    stride = pool_param['stride']
+    pool_height = pool_param['pool_height']
+    pool_width = pool_param['pool_width']
+    H_out = int(1 + (H - pool_height) / stride)
+    W_out = int(1 + (W - pool_width) / stride)
+    out = np.zeros((N,C,H_out,W_out))
+    for idx in np.ndindex(out.shape):
+        i_N, i_C, i_H_out, i_W_out = idx
+        x_slice = x[i_N, i_C,
+                   i_H_out*stride:i_H_out*stride+pool_height,
+                   i_W_out*stride:i_W_out*stride+pool_width]
+        out[idx] = x_slice.max()
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -677,7 +691,20 @@ def max_pool_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the max-pooling backward pass                           #
     ###########################################################################
-    pass
+    x, pool_param = cache
+    dx = np.zeros_like(x)
+    stride = pool_param['stride']
+    pool_height = pool_param['pool_height']
+    pool_width = pool_param['pool_width']
+    for idx in np.ndindex(dout.shape):
+        i_N, i_C, i_H_out, i_W_out = idx
+        H_range = slice(i_H_out*stride, i_H_out*stride+pool_height)
+        W_range = slice(i_W_out*stride, i_W_out*stride+pool_width)
+        # save the slice to a variable
+        idx_slice = i_N, i_C, H_range, W_range
+        max_val = x[idx_slice].max()
+        dx[idx_slice][x[idx_slice]==max_val] += dout[idx]
+  
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -855,6 +882,8 @@ def softmax_loss(x, y):
     - loss: Scalar giving the loss
     - dx: Gradient of the loss with respect to x
     """
+    # XN: is actullay softmax + cross entropy
+    # shifted for numerical stability?
     shifted_logits = x - np.max(x, axis=1, keepdims=True)
     Z = np.sum(np.exp(shifted_logits), axis=1, keepdims=True)
     log_probs = shifted_logits - np.log(Z)
