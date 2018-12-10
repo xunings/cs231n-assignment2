@@ -867,6 +867,7 @@ def spatial_groupnorm_backward(dout, cache):
     dgamma = (dout*out_norm).sum(axis=0, keepdims=True).sum(axis=2, keepdims=True).sum(axis=3, keepdims=True)
     dout_norm = dout*gamma
     dout_norm_trans = dout_norm.reshape(NG, D)
+    # Copied from the layer norm code, with variables renamed.
     dx_trans = dout_norm_trans/std_x_trans - np.sum(dout_norm_trans, axis=1,keepdims=True)/D/std_x_trans \
         - out_norm_trans * ( np.sum(dout_norm_trans*out_norm_trans, axis=1, keepdims=True)/std_x_trans/ D )
     dx = dx_trans.reshape(N,C,H,W)
